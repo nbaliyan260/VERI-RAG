@@ -9,6 +9,8 @@ Full specification, architecture, and results tables: **[../README.md](../README
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[llm]"
+# Set ANTHROPIC_API_KEY in .env, then:
+veri-rag run-paper-llm --profile auto --max-queries 4
 ./scripts/run_paper_pipeline.sh
 pytest -q
 ```

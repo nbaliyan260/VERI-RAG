@@ -127,6 +127,55 @@ class MockLLM(BaseLLM):
         return self._last_token_count
 
 
+class AnthropicLLM(BaseLLM):
+    """LLM using the Anthropic Messages API (Claude)."""
+
+    def __init__(
+        self,
+        model_name: str = "claude-haiku-4-5-20251001",
+        temperature: float = 0.0,
+        max_tokens: int = 512,
+        api_key: str | None = None,
+    ):
+        try:
+            from anthropic import Anthropic
+        except ImportError:
+            raise ImportError(
+                "anthropic is required. Install with: pip install anthropic"
+            ) from None
+
+        self._model_name = model_name
+        self._temperature = temperature
+        self._max_tokens = max_tokens
+        self._last_token_count = 0
+        self._client = Anthropic(api_key=api_key or os.getenv("ANTHROPIC_API_KEY"))
+
+    def generate(self, prompt: str) -> str:
+        response = self._client.messages.create(
+            model=self._model_name,
+            max_tokens=self._max_tokens,
+            temperature=self._temperature,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        parts: list[str] = []
+        for block in response.content:
+            if getattr(block, "type", None) == "text":
+                parts.append(block.text)
+        content = "".join(parts)
+        usage = response.usage
+        if usage:
+            self._last_token_count = (usage.input_tokens or 0) + (usage.output_tokens or 0)
+        return content.strip()
+
+    @property
+    def model_name(self) -> str:
+        return self._model_name
+
+    @property
+    def token_count(self) -> int:
+        return self._last_token_count
+
+
 class OpenAICompatibleLLM(BaseLLM):
     """LLM using the OpenAI API (or any compatible endpoint)."""
 
@@ -229,6 +278,8 @@ def create_llm(provider: str = "mock", **kwargs) -> BaseLLM:
         return MockLLM(**kwargs)
     elif provider == "openai":
         return OpenAICompatibleLLM(**kwargs)
+    elif provider == "anthropic":
+        return AnthropicLLM(**kwargs)
     elif provider == "ollama":
         return OllamaLLM(**kwargs)
     else:

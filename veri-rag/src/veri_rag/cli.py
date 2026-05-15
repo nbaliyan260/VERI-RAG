@@ -356,18 +356,27 @@ def run_paper_pipeline(
 
 @app.command("run-paper-llm")
 def run_paper_llm(
-    profile: str = typer.Option("mock", "--profile", help="mock | openai | ollama_llama"),
+    profile: str = typer.Option(
+        "auto",
+        "--profile",
+        help="auto | claude_haiku | claude_sonnet | openai | mock | ollama_llama",
+    ),
     max_queries: int = typer.Option(4, "--max-queries"),
+    config: str = typer.Option(
+        "configs/paper_claude.yaml",
+        "--config",
+        help="Experiment config (paper_claude.yaml or paper_openai.yaml)",
+    ),
     fallback_mock: bool = typer.Option(
         True,
         "--fallback-mock/--no-fallback-mock",
-        help="If OpenAI/Ollama unavailable, run with mock LLM",
+        help="If chosen provider fails, try other APIs then mock",
     ),
 ) -> None:
-    """Run a small experiment matrix (mock by default; OpenAI/Ollama optional)."""
+    """Run a small experiment matrix (auto: Claude → OpenAI → mock)."""
     from veri_rag.rag.llm_health import resolve_profile_with_fallback
 
-    cfg_path = _resolve_config("configs/paper_openai.yaml")
+    cfg_path = _resolve_config(config)
     settings = load_settings(cfg_path)
     effective, warning = resolve_profile_with_fallback(
         profile,

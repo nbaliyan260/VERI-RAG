@@ -1,8 +1,21 @@
 # LLM profiles for experiments — set llm_profile in experiment config or CLI
+# CLI: veri-rag run-paper-llm --profile auto|claude_haiku|openai|mock
 profiles:
   mock:
     provider: mock
     model_name: mock-llm-v1
+    temperature: 0.0
+    max_tokens: 512
+
+  claude_haiku:
+    provider: anthropic
+    model_name: claude-haiku-4-5-20251001
+    temperature: 0.0
+    max_tokens: 512
+
+  claude_sonnet:
+    provider: anthropic
+    model_name: claude-sonnet-4-20250514
     temperature: 0.0
     max_tokens: 512
 
@@ -30,4 +43,4 @@ profiles:
     temperature: 0.0
     max_tokens: 512
 
-default_profile: mock
+default_profile: auto

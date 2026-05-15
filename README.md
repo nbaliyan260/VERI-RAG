@@ -20,7 +20,7 @@ Working subtitle (paper title): **Interaction-Aware Attribution and Evidence-Car
 | Baselines: GRADA, RobustRAG | ✅ |
 | PoisonedRAG download + NQ subset experiments | ✅ |
 | HPC shard / merge (`run-experiment-shard`, Slurm template) | ✅ |
-| LLM profiles (mock / OpenAI / Ollama) + quota fallback | ✅ |
+| LLM profiles (mock / **Claude** / OpenAI / Ollama) + auto fallback | ✅ |
 | End-to-end script | `veri-rag/scripts/run_paper_pipeline.sh` |
 | Tests | **19** pytest (run `cd veri-rag && pytest -q`) |
 
@@ -30,7 +30,8 @@ Working subtitle (paper title): **Interaction-Aware Attribution and Evidence-Car
 |---|---:|---|
 | Enterprise defense matrix | 496 | `veri-rag/outputs/experiment_results/results.csv` |
 | PoisonedRAG (NQ subset) | 110 | `veri-rag/outputs/poisonedrag/experiment_results/results.csv` |
-| Paper LLM profile (mock fallback) | 88 | `veri-rag/outputs/paper_openai/results/results.csv` |
+| Paper LLM (Claude Haiku, 2-query run) | 138 | `veri-rag/outputs/paper_claude/results/results.csv` |
+| Paper LLM (mock fallback) | 88 | `veri-rag/outputs/paper_openai/results/results.csv` |
 | HPC shard demo (merged) | 216 | `veri-rag/outputs/hpc_runs/paper_demo/merged_results.csv` |
 
 Markdown summaries: `veri-rag/outputs/reports/report.md`, `veri-rag/outputs/poisonedrag/reports/report.md`, `veri-rag/outputs/hpc_runs/paper_demo/final_report.md`.
@@ -840,7 +841,8 @@ pip install -e ".[llm]"
 pip install -e ".[all]"
 
 cp .env.example .env
-# Optional for real LLM: OPENAI_API_KEY=sk-... in .env
+# Claude (student-friendly): ANTHROPIC_API_KEY=sk-ant-... in .env
+# Optional later: OPENAI_API_KEY=sk-...
 
 # If `veri-rag` is not found, activate .venv or use:
 # ./scripts/veri-rag.sh <command>
@@ -860,8 +862,9 @@ veri-rag download-benchmark --name poisonedrag --dataset nq --max-queries 20
 veri-rag ingest --config configs/poisonedrag.yaml
 veri-rag run-experiment --config configs/poisonedrag.yaml
 
-# LLM experiments (defaults to mock; OpenAI falls back on quota errors)
-veri-rag run-paper-llm --profile mock --max-queries 4
+# LLM experiments (--profile auto: Claude → OpenAI → mock)
+veri-rag run-paper-llm --profile auto --max-queries 4
+veri-rag run-paper-llm --profile claude_haiku --max-queries 4
 veri-rag run-paper-llm --profile openai --max-queries 4
 
 pytest -q
@@ -890,7 +893,7 @@ veri-rag run-experiment            --config configs/mvp.yaml
 veri-rag run-experiment-shard      --config configs/hpc_template.yaml --run-id <id> --shard-id 0 --num-shards 10
 veri-rag merge-hpc-results         --run-dir outputs/hpc_runs/<run_id>
 veri-rag run-paper-pipeline        [--max-poisonedrag 15]
-veri-rag run-paper-llm             --profile {mock|openai|ollama_llama} [--max-queries 4] [--fallback-mock]
+veri-rag run-paper-llm             --profile {auto|claude_haiku|openai|mock|ollama_llama} [--config configs/paper_claude.yaml]
 ```
 
 **Configs:** `configs/mvp.yaml` (enterprise), `configs/poisonedrag.yaml`, `configs/paper_openai.yaml`, `configs/models.yaml`, `configs/hpc_template.yaml`, `configs/experiments.yaml`.

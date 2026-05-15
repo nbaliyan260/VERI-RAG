@@ -1,0 +1,43 @@
+# Paper-scale experiments with Claude (ANTHROPIC_API_KEY in .env)
+# Falls back to OpenAI if OPENAI_API_KEY is set and Claude fails; then mock.
+corpus:
+  data_dir: "data/synthetic_enterprise/clean_corpus"
+  processed_dir: "data/processed"
+
+embedding:
+  provider: "tfidf"
+vector_store:
+  provider: "memory"
+  index_path: "data/processed/faiss_index"
+
+retrieval:
+  top_k: 5
+
+llm:
+  provider: "anthropic"
+  model_name: "claude-haiku-4-5-20251001"
+  temperature: 0.0
+  max_tokens: 512
+
+llm_profile: claude_haiku
+
+influence:
+  method: "riaa"
+  enable_pairwise: true
+  max_pairwise_tests: 4
+  calibrator_path: "data/processed/harmfulness_calibrator.pkl"
+
+verification:
+  certified_smoothing:
+    enabled: true
+    num_samples: 4
+
+experiment:
+  max_queries: 4
+  attacks: [poisoning, prompt_injection, adaptive]
+  defenses: [none, grada, robust_rag, veri_rag]
+
+outputs:
+  results_dir: "outputs/paper_claude/results"
+  reports_dir: "outputs/paper_claude/reports"
+  hpc_runs_dir: "outputs/hpc_runs/paper_claude"

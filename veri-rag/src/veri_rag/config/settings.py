@@ -186,6 +186,10 @@ def apply_llm_profile(settings: Settings, profile_name: str | None = None) -> Se
     with open(models_path, encoding="utf-8") as f:
         models = yaml.safe_load(f) or {}
     name = profile_name or settings.llm_profile or models.get("default_profile", "mock")
+    if name == "auto":
+        from veri_rag.rag.llm_health import resolve_auto_profile
+
+        name = resolve_auto_profile()
     profile = models.get("profiles", {}).get(name)
     if profile:
         settings.llm = LLMConfig(**{**settings.llm.model_dump(), **profile})

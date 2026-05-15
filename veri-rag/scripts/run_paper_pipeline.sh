@@ -9,7 +9,7 @@ if [[ -d .venv ]]; then
 fi
 
 CONFIG="${1:-configs/mvp.yaml}"
-LLM_PROFILE="${2:-mock}"
+LLM_PROFILE="${2:-auto}"
 MAX_PR="${3:-20}"
 
 echo "==> Phase 1: Synthetic corpus + ingest"

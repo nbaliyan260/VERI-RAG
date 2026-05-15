@@ -1,0 +1,42 @@
+# Paper-scale experiments with OpenAI (requires OPENAI_API_KEY in .env)
+corpus:
+  data_dir: "data/synthetic_enterprise/clean_corpus"
+  processed_dir: "data/processed"
+
+embedding:
+  provider: "tfidf"
+vector_store:
+  provider: "memory"
+  index_path: "data/processed/faiss_index"
+
+retrieval:
+  top_k: 5
+
+llm:
+  provider: "mock"
+  model_name: "mock-llm-v1"
+  temperature: 0.0
+  max_tokens: 512
+
+llm_profile: mock
+
+influence:
+  method: "riaa"
+  enable_pairwise: true
+  max_pairwise_tests: 4
+  calibrator_path: "data/processed/harmfulness_calibrator.pkl"
+
+verification:
+  certified_smoothing:
+    enabled: true
+    num_samples: 4
+
+experiment:
+  max_queries: 8
+  attacks: [poisoning, prompt_injection, adaptive]
+  defenses: [none, grada, robust_rag, veri_rag]
+
+outputs:
+  results_dir: "outputs/paper_openai/results"
+  reports_dir: "outputs/paper_openai/reports"
+  hpc_runs_dir: "outputs/hpc_runs/paper_openai"

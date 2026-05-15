@@ -69,8 +69,29 @@ class VERIRAGPipeline:
             self.rag, self.risk_scorer, self.repair_engine
         )
         self.attack_runner = AttackRunner()
+        self.poisonedrag_loader = None
+        if settings.experiment.benchmark == "poisonedrag":
+            from veri_rag.corpus.benchmarks.poisonedrag import PoisonedRAGLoader
+
+            self.poisonedrag_loader = PoisonedRAGLoader()
         self.metrics = MetricsCalculator()
         self.provenance = ProvenanceGraphBuilder()
+
+    def reload_llm(self) -> None:
+        """Reload LLM from current settings (after profile switch)."""
+        from veri_rag.rag.generator import create_llm
+
+        self.rag.llm = create_llm(
+            provider=self.settings.llm.provider,
+            model_name=self.settings.llm.model_name,
+            temperature=self.settings.llm.temperature,
+            max_tokens=self.settings.llm.max_tokens,
+        )
+        self.riaa.loo.rag = self.rag
+        self.repair_engine.rag = self.rag
+        self.smoothing.rag = self.rag
+        self.baseline_runner.rag = self.rag
+        self.baseline_runner.robust.rag = self.rag
 
     @classmethod
     def from_config(cls, config_path: str | Path, build_index: bool = False) -> "VERIRAGPipeline":
@@ -97,7 +118,20 @@ class VERIRAGPipeline:
         """Run pipeline for one query under attack and optional defense."""
         clean = self.retrieve_clean(query)
         spec = self.attack_runner.build_spec(attack_type, query_id, query, gold_answer)
-        malicious = self.attack_runner.generate_chunks(spec)
+        if (
+            self.poisonedrag_loader
+            and query_id.startswith("pr_")
+            and attack_type == AttackType.POISONING
+        ):
+            row = next(
+                (q for q in self.poisonedrag_loader.load_queries() if q["query_id"] == query_id),
+                {"query_id": query_id, "query": query, "gold_answer": gold_answer},
+            )
+            malicious = self.poisonedrag_loader.attack_chunks_for_query(row)
+            if row.get("target_wrong_answer"):
+                spec.target_wrong_answer = row["target_wrong_answer"]
+        else:
+            malicious = self.attack_runner.generate_chunks(spec)
         retrieved = self.attack_runner.inject_into_retrieval(
             clean, malicious, self.settings.retrieval.top_k
         )

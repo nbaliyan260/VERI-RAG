@@ -10,7 +10,8 @@ import yaml
 
 from veri_rag.attacks.runner import load_attack_config_from_experiments
 from veri_rag.config.schema import AttackType
-from veri_rag.config.settings import get_project_root
+from veri_rag.config.settings import Settings, get_project_root
+from veri_rag.corpus.benchmarks.poisonedrag import PoisonedRAGLoader
 from veri_rag.corpus.synthetic import load_query_set
 from veri_rag.eval.metrics import MetricsCalculator
 from veri_rag.eval.report_writer import write_csv, write_markdown_report
@@ -26,48 +27,75 @@ from veri_rag.pipeline import VERIRAGPipeline
 class ExperimentRunner:
     """Run configured experiments and write CSV/Markdown outputs."""
 
-    def __init__(self, pipeline: VERIRAGPipeline, experiments_config: Path):
+    def __init__(
+        self,
+        pipeline: VERIRAGPipeline,
+        experiments_config: Path | None = None,
+    ):
         self.pipeline = pipeline
-        self.experiments_config = experiments_config
+        self.settings = pipeline.settings
         self.metrics = MetricsCalculator()
-        with open(experiments_config, encoding="utf-8") as f:
-            self.config = yaml.safe_load(f) or {}
-        self.attack_runner_config = load_attack_config_from_experiments(experiments_config)
-        from veri_rag.attacks.runner import AttackRunner
+        self.config: dict[str, Any] = {}
+        if experiments_config and experiments_config.exists():
+            with open(experiments_config, encoding="utf-8") as f:
+                self.config = yaml.safe_load(f) or {}
+        from veri_rag.attacks.runner import DEFAULT_ATTACK_CONFIG, AttackRunner
 
+        if experiments_config and experiments_config.exists():
+            self.attack_runner_config = load_attack_config_from_experiments(experiments_config)
+        else:
+            self.attack_runner_config = DEFAULT_ATTACK_CONFIG
         self.pipeline.attack_runner = AttackRunner(self.attack_runner_config)
 
     def load_queries(self) -> list[dict[str, str]]:
+        exp = self.settings.experiment
+        if exp.benchmark == "poisonedrag":
+            queries = PoisonedRAGLoader().load_queries(max_queries=exp.max_queries)
+            return queries
         qs = self.config.get("query_sets", {}).get("enterprise_qa")
         if qs:
-            return qs
-        root = get_project_root()
-        for rel in (
-            "data/synthetic_enterprise/queries/enterprise_qa.jsonl",
-            "data/benchmarks/poisonedrag/queries.jsonl",
-        ):
-            qpath = root / rel
-            if qpath.exists():
-                return load_query_set(qpath)
-        return []
+            queries = qs
+        else:
+            queries = []
+            root = get_project_root()
+            for rel in (
+                "data/synthetic_enterprise/queries/enterprise_qa.jsonl",
+                "data/benchmarks/poisonedrag/queries.jsonl",
+            ):
+                qpath = root / rel
+                if qpath.exists():
+                    queries = load_query_set(qpath)
+                    break
+        if exp.max_queries is not None:
+            queries = queries[: exp.max_queries]
+        return queries
 
     def build_task_list(self) -> list[dict[str, Any]]:
         queries = self.load_queries()
-        attacks = [
-            AttackType.POISONING,
-            AttackType.PROMPT_INJECTION,
-            AttackType.SECRET_LEAKAGE,
-            AttackType.BLOCKER,
-            AttackType.TOPIC_FLIP,
-            AttackType.ADAPTIVE,
-        ]
-        defenses = ["none", "safe_prompt", "risk_quarantine", "grada", "robust_rag", "veri_rag"]
+        exp = self.settings.experiment
+        attack_names = exp.attacks
+        defenses = exp.defenses
+        is_poisonedrag = exp.benchmark == "poisonedrag"
+
         tasks: list[dict[str, Any]] = []
         for q in queries:
-            for attack in attacks:
-                if attack == AttackType.BLOCKER and q["query_id"] not in ["q001", "q002", "q004"]:
-                    continue
-                if attack == AttackType.TOPIC_FLIP and q["query_id"] != "q005":
+            for attack_name in attack_names:
+                attack = AttackType(attack_name.replace("-", "_"))
+                if not is_poisonedrag:
+                    if attack == AttackType.BLOCKER and q["query_id"] not in [
+                        "q001",
+                        "q002",
+                        "q004",
+                    ]:
+                        continue
+                    if attack == AttackType.TOPIC_FLIP and q["query_id"] != "q005":
+                        continue
+                if is_poisonedrag and attack not in (
+                    AttackType.POISONING,
+                    AttackType.PROMPT_INJECTION,
+                    AttackType.ADAPTIVE,
+                    AttackType.SECRET_LEAKAGE,
+                ):
                     continue
                 for defense in defenses:
                     tasks.append(
@@ -75,9 +103,11 @@ class ExperimentRunner:
                             "query_id": q["query_id"],
                             "query": q["query"],
                             "gold_answer": q.get("gold_answer", ""),
+                            "target_wrong_answer": q.get("target_wrong_answer", ""),
                             "attack": attack.value,
                             "defense": defense,
                             "seed": 0,
+                            "benchmark": exp.benchmark,
                         }
                     )
         return tasks
@@ -92,6 +122,14 @@ class ExperimentRunner:
             seed=task.get("seed", 0),
         )
         row["defense"] = task["defense"]
+        row["benchmark"] = task.get("benchmark", self.settings.experiment.benchmark)
+        if task.get("target_wrong_answer"):
+            row["attack_success"] = self.metrics.attack_success(
+                AttackType(task["attack"]),
+                row.get("final_answer", row.get("baseline_answer", "")),
+                task.get("gold_answer", ""),
+                task["target_wrong_answer"],
+            )
         return row
 
     def run_repair_effectiveness(
@@ -125,24 +163,28 @@ class ExperimentRunner:
             save_cached_result(cache, row)
             rows.append(row)
 
-            jsonl_shard = run_dir / "shards" / f"shard_{shard_id or 0}.jsonl"
-            jsonl_shard.parent.mkdir(parents=True, exist_ok=True)
-            with open(jsonl_shard, "a", encoding="utf-8") as f:
-                f.write(json.dumps(row, default=str) + "\n")
+            if shard_id is not None:
+                jsonl_shard = run_dir / "shards" / f"shard_{shard_id}.jsonl"
+                jsonl_shard.parent.mkdir(parents=True, exist_ok=True)
+                with open(jsonl_shard, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(row, default=str) + "\n")
 
+        all_tasks = self.build_task_list()
         summary: dict[str, dict[str, float]] = {}
-        for defense in {t["defense"] for t in self.build_task_list()}:
+        for defense in {t["defense"] for t in all_tasks}:
             subset = [r for r in rows if r.get("defense") == defense]
             if not subset:
                 continue
+            n = len(subset)
             summary[defense] = {
-                "attack_success_rate": sum(1 for r in subset if r.get("attack_success")) / len(subset),
-                "repair_success_rate": sum(1 for r in subset if r.get("repair_success")) / len(subset),
-                "mean_certificate_score": sum(r.get("certificate_score", 0) for r in subset) / len(subset),
+                "attack_success_rate": sum(1 for r in subset if r.get("attack_success")) / n,
+                "repair_success_rate": sum(1 for r in subset if r.get("repair_success")) / n,
+                "mean_certificate_score": sum(r.get("certificate_score", 0) for r in subset) / n,
                 "mean_certified_bound_post": sum(
                     r.get("certified_bound_post") or 0 for r in subset
-                ) / len(subset),
-                "precision_at_1": sum(r.get("precision_at_1", 0) for r in subset) / len(subset),
+                )
+                / n,
+                "precision_at_1": sum(r.get("precision_at_1", 0) for r in subset) / n,
             }
         return rows, summary
 
@@ -164,10 +206,14 @@ class ExperimentRunner:
             return run_dir / "shards" / f"shard_{shard_id}.jsonl"
 
         results_dir = root / self.pipeline.settings.outputs.results_dir
+        results_dir.mkdir(parents=True, exist_ok=True)
         csv_path = results_dir / "results.csv"
         write_csv(rows, csv_path)
         report_path = root / self.pipeline.settings.outputs.reports_dir / "report.md"
-        write_markdown_report(summary, report_path, "repair_effectiveness")
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        write_markdown_report(
+            summary, report_path, self.settings.experiment.benchmark
+        )
         jsonl_path = results_dir / "results.jsonl"
         with open(jsonl_path, "w", encoding="utf-8") as f:
             for row in rows:

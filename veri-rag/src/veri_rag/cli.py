@@ -11,7 +11,19 @@ from rich.console import Console
 from rich.table import Table
 
 from veri_rag.config.schema import AttackType
-from veri_rag.config.settings import ensure_output_dirs, get_project_root, load_settings
+from veri_rag.config.settings import (
+    apply_llm_profile,
+    ensure_output_dirs,
+    get_project_root,
+    load_settings,
+)
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(get_project_root() / ".env")
+except ImportError:
+    pass
 from veri_rag.corpus.ingest import ingest_corpus
 from veri_rag.corpus.synthetic import create_synthetic_corpus, load_query_set
 from veri_rag.eval.experiment_runner import ExperimentRunner
@@ -56,23 +68,33 @@ def create_synthetic(
 @app.command("download-benchmark")
 def download_benchmark(
     name: str = typer.Option(..., "--name", help="poisonedrag"),
+    dataset: str = typer.Option("nq", "--dataset", help="nq | hotpotqa | msmarco"),
+    max_queries: int = typer.Option(20, "--max-queries", help="Limit queries for laptop runs"),
+    sample_only: bool = typer.Option(
+        False, "--sample-only", help="Use built-in sample instead of GitHub download"
+    ),
+    clone_repo: bool = typer.Option(
+        False, "--clone-repo", help="Shallow-clone full PoisonedRAG repo"
+    ),
 ) -> None:
-    """Prepare benchmark data (sample subset or local files)."""
-    root = get_project_root()
-    if name == "poisonedrag":
-        from veri_rag.corpus.benchmarks.poisonedrag import PoisonedRAGLoader
-
-        loader = PoisonedRAGLoader()
-        clean = loader.export_for_ingest()
-        console.print(f"[green]PoisonedRAG sample at {loader.data_dir}[/green]")
-        console.print(f"[dim]Clean corpus: {clean}[/dim]")
-        console.print(
-            "[dim]Place full PoisonedRAG JSONL at "
-            f"{loader.data_dir / 'queries.jsonl'} to override sample.[/dim]"
-        )
-    else:
+    """Download PoisonedRAG attacks from GitHub and export VERI-RAG format."""
+    if name != "poisonedrag":
         console.print(f"[red]Unknown benchmark: {name}[/red]")
         raise typer.Exit(1)
+    from veri_rag.corpus.benchmarks.poisonedrag import PoisonedRAGLoader
+
+    loader = PoisonedRAGLoader()
+    if sample_only:
+        loader.ensure_sample_data()
+        out = loader.export_for_ingest()
+    else:
+        console.print(
+            f"[dim]Downloading from "
+            f"https://github.com/sleeepeer/PoisonedRAG ({dataset}, max={max_queries})...[/dim]"
+        )
+        out = loader.download(dataset=dataset, max_queries=max_queries, clone_repo=clone_repo)
+    console.print(f"[green]PoisonedRAG data at {loader.data_dir}[/green]")
+    console.print(f"[dim]Clean corpus: {out}[/dim]")
 
 
 @app.command("ingest")
@@ -283,6 +305,90 @@ def merge_hpc(
         path = root / path
     script = root / "hpc" / "merge_results.py"
     subprocess.run(["python", str(script), "--run-dir", str(path)], check=True)
+
+
+@app.command("run-paper-pipeline")
+def run_paper_pipeline(
+    config: str = typer.Option("configs/mvp.yaml"),
+    max_poisonedrag: int = typer.Option(15, "--max-poisonedrag"),
+    skip_experiments: bool = typer.Option(False, "--skip-experiments"),
+) -> None:
+    """Run full paper-scale setup: corpus, calibrator, PoisonedRAG, experiments."""
+    root = get_project_root()
+    create_synthetic_corpus(root / "data/synthetic_enterprise")
+    ingest(config=config)
+
+    for atk in ["poisoning", "prompt_injection", "secret_leakage", "blocker", "topic_flip", "adaptive"]:
+        try:
+            generate_attacks(attack=atk, config=config)
+        except Exception as exc:
+            console.print(f"[yellow]Skip attack {atk}: {exc}[/yellow]")
+
+    train_calibrator(config=config)
+
+    download_benchmark(
+        name="poisonedrag",
+        dataset="nq",
+        max_queries=max_poisonedrag,
+        sample_only=False,
+        clone_repo=False,
+    )
+    ingest(config="configs/poisonedrag.yaml")
+
+    if not skip_experiments:
+        run_experiment(config=config)
+        run_experiment(config="configs/poisonedrag.yaml")
+        run_experiment_shard(
+            config="configs/hpc_template.yaml",
+            run_id="paper_demo",
+            shard_id=0,
+            num_shards=2,
+        )
+        run_experiment_shard(
+            config="configs/hpc_template.yaml",
+            run_id="paper_demo",
+            shard_id=1,
+            num_shards=2,
+        )
+        merge_hpc(run_dir="outputs/hpc_runs/paper_demo")
+    console.print("[green]Paper pipeline complete.[/green]")
+
+
+@app.command("run-paper-llm")
+def run_paper_llm(
+    profile: str = typer.Option("mock", "--profile", help="mock | openai | ollama_llama"),
+    max_queries: int = typer.Option(4, "--max-queries"),
+    fallback_mock: bool = typer.Option(
+        True,
+        "--fallback-mock/--no-fallback-mock",
+        help="If OpenAI/Ollama unavailable, run with mock LLM",
+    ),
+) -> None:
+    """Run a small experiment matrix (mock by default; OpenAI/Ollama optional)."""
+    from veri_rag.rag.llm_health import resolve_profile_with_fallback
+
+    cfg_path = _resolve_config("configs/paper_openai.yaml")
+    settings = load_settings(cfg_path)
+    effective, warning = resolve_profile_with_fallback(
+        profile,
+        fallback_mock=fallback_mock,
+        model_name=settings.llm.model_name,
+    )
+    if warning:
+        console.print(f"[yellow]{warning}[/yellow]")
+        console.print(f"[dim]Continuing with profile: {effective}[/dim]")
+    settings = apply_llm_profile(settings, effective)
+    settings.experiment.max_queries = max_queries
+    ensure_output_dirs(settings)
+    from veri_rag.corpus.ingest import ingest_corpus
+
+    index = ingest_corpus(settings)
+    pipe = VERIRAGPipeline(settings, index)
+    pipe.reload_llm()
+    exp_path = cfg_path.parent / "experiments.yaml"
+    runner = ExperimentRunner(pipe, exp_path if exp_path.exists() else None)
+    csv_path = runner.run_all(run_id=f"llm_{effective}")
+    console.print(f"[green]LLM experiment ({effective}): {csv_path}[/green]")
 
 
 @app.command("run-attack-eval")

@@ -132,6 +132,34 @@ class CorpusConfig(BaseModel):
     file_types: list[str] = Field(default_factory=lambda: [".txt", ".md", ".jsonl"])
 
 
+class ExperimentConfig(BaseModel):
+    """Experiment matrix controls (optional in YAML)."""
+    benchmark: str = "enterprise"
+    max_queries: int | None = None
+    attacks: list[str] = Field(
+        default_factory=lambda: [
+            "poisoning",
+            "prompt_injection",
+            "secret_leakage",
+            "blocker",
+            "topic_flip",
+            "adaptive",
+        ]
+    )
+    defenses: list[str] = Field(
+        default_factory=lambda: [
+            "none",
+            "safe_prompt",
+            "risk_quarantine",
+            "grada",
+            "robust_rag",
+            "veri_rag",
+        ]
+    )
+    poisonedrag_dataset: str = "nq"
+    poisonedrag_max_download: int = 50
+
+
 class Settings(BaseModel):
     """Top-level settings parsed from a YAML config file."""
     corpus: CorpusConfig = Field(default_factory=CorpusConfig)
@@ -145,6 +173,24 @@ class Settings(BaseModel):
     repair: RepairConfig = Field(default_factory=RepairConfig)
     verification: VerificationConfig = Field(default_factory=VerificationConfig)
     outputs: OutputsConfig = Field(default_factory=OutputsConfig)
+    experiment: ExperimentConfig = Field(default_factory=ExperimentConfig)
+    llm_profile: str | None = None
+
+
+def apply_llm_profile(settings: Settings, profile_name: str | None = None) -> Settings:
+    """Merge LLM settings from configs/models.yaml profile."""
+    root = get_project_root()
+    models_path = root / "configs" / "models.yaml"
+    if not models_path.exists():
+        return settings
+    with open(models_path, encoding="utf-8") as f:
+        models = yaml.safe_load(f) or {}
+    name = profile_name or settings.llm_profile or models.get("default_profile", "mock")
+    profile = models.get("profiles", {}).get(name)
+    if profile:
+        settings.llm = LLMConfig(**{**settings.llm.model_dump(), **profile})
+        settings.llm_profile = name
+    return settings
 
 
 def load_settings(config_path: str | Path) -> Settings:
@@ -156,10 +202,17 @@ def load_settings(config_path: str | Path) -> Settings:
     with open(config_path, "r") as f:
         raw: dict[str, Any] = yaml.safe_load(f) or {}
 
-    # Remove 'project' key which is metadata, not settings
     raw.pop("project", None)
+    llm_profile = raw.pop("llm_profile", None)
+    experiment_raw = raw.pop("experiment", None)
 
-    return Settings(**raw)
+    settings = Settings(**raw)
+    if experiment_raw:
+        settings.experiment = ExperimentConfig(**experiment_raw)
+    if llm_profile:
+        settings.llm_profile = llm_profile
+    settings = apply_llm_profile(settings)
+    return settings
 
 
 def get_project_root() -> Path:

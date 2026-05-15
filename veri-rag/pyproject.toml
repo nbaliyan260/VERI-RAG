@@ -26,6 +26,24 @@ dependencies = [
     "eval-type-backport>=0.2",
 ]
 
+[project.optional-dependencies]
+llm = [
+    "openai>=1.6",
+    "python-dotenv>=1.0",
+]
+embeddings = [
+    "sentence-transformers>=2.2",
+]
+vector = [
+    "faiss-cpu>=1.7",
+]
+all = [
+    "openai>=1.6",
+    "python-dotenv>=1.0",
+    "sentence-transformers>=2.2",
+    "faiss-cpu>=1.7",
+]
+
 [project.scripts]
 veri-rag = "veri_rag.cli:app"
 

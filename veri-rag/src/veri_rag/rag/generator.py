@@ -8,6 +8,13 @@ import time
 from abc import ABC, abstractmethod
 from typing import Any
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
+
 
 class BaseLLM(ABC):
     """Abstract LLM interface."""

@@ -2,9 +2,38 @@
 
 **Evidence-Carrying Self-Healing Defense for Secure Retrieval-Augmented Generation**
 
+[![GitHub](https://img.shields.io/github/stars/nbaliyan260/VERI-RAG?style=social)](https://github.com/nbaliyan260/VERI-RAG)
+
 > A research prototype that automatically attacks a RAG system, detects unsafe behavior, identifies *which retrieved chunks* (and which *pairs* of chunks) caused it, repairs the pipeline with minimally destructive actions, and produces a verification certificate combining heuristic checks with a **certified robustness bound**.
 
 Working subtitle (paper title): **Interaction-Aware Attribution and Evidence-Carrying Repair for Secure Retrieval-Augmented Generation.**
+
+**Repository:** [github.com/nbaliyan260/VERI-RAG](https://github.com/nbaliyan260/VERI-RAG) — code, configs, benchmark subsets, and **committed experiment results** under `veri-rag/outputs/`.
+
+### Implementation snapshot (May 2026)
+
+| Component | Status |
+|---|---|
+| Phase 1 MVP (RAG, 6 attacks, risk, LOO/RIAA, repair, certificate) | ✅ Shipped |
+| RIAA pairwise + harmfulness calibrator | ✅ |
+| Certified post-repair smoothing (Clopper–Pearson) | ✅ |
+| Baselines: GRADA, RobustRAG | ✅ |
+| PoisonedRAG download + NQ subset experiments | ✅ |
+| HPC shard / merge (`run-experiment-shard`, Slurm template) | ✅ |
+| LLM profiles (mock / OpenAI / Ollama) + quota fallback | ✅ |
+| End-to-end script | `veri-rag/scripts/run_paper_pipeline.sh` |
+| Tests | **19** pytest (run `cd veri-rag && pytest -q`) |
+
+**Latest laptop runs (MockLLM, reproducible without API billing):**
+
+| Experiment | Rows | Path |
+|---|---:|---|
+| Enterprise defense matrix | 496 | `veri-rag/outputs/experiment_results/results.csv` |
+| PoisonedRAG (NQ subset) | 110 | `veri-rag/outputs/poisonedrag/experiment_results/results.csv` |
+| Paper LLM profile (mock fallback) | 88 | `veri-rag/outputs/paper_openai/results/results.csv` |
+| HPC shard demo (merged) | 216 | `veri-rag/outputs/hpc_runs/paper_demo/merged_results.csv` |
+
+Markdown summaries: `veri-rag/outputs/reports/report.md`, `veri-rag/outputs/poisonedrag/reports/report.md`, `veri-rag/outputs/hpc_runs/paper_demo/final_report.md`.
 
 ---
 
@@ -47,8 +76,9 @@ Working subtitle (paper title): **Interaction-Aware Attribution and Evidence-Car
 |---|---|
 | Is the engineering plan sound? | ✅ Modular, testable, reproducible. |
 | Will the MVP run end-to-end and produce a clean result table? | ✅ Yes. |
-| Is the plan A\*-ready **today**? | ⚠️ ~85%. Build can start now; 4 paper-writing items remain. |
-| Is the plan A\*-ready **with the 4 fixes in §4**? | ✅ Yes — strong USENIX Sec 2026 / EMNLP 2026 candidate. |
+| Is a runnable prototype available? | ✅ Yes — see [Implementation snapshot](#implementation-snapshot-may-2026) and `veri-rag/`. |
+| Is the plan A\*-ready **today**? | ⚠️ Prototype + evaluation pipeline done; 4 paper-writing items in §4 remain. |
+| Is the plan A\*-ready **with the 4 fixes in §4**? | ✅ Strong USENIX Sec 2026 / EMNLP 2026 candidate (no acceptance-probability claims). |
 | Workshop / B-tier fallback if A\* misses? | ✅ NeurIPS SafeGenAI, TrustNLP, EuroS&P, ACSAC, AsiaCCS. |
 
 The original `VERI_RAG_IDEA_REVIEW.md` identified three gaps that have now been folded into the plan: (G1) influence-method novelty → **RIAA**; (G2) certificate formal grounding → **threat model + certified smoothing**; (G3) evaluation rigor → **real benchmarks, real LLMs, strong baselines, adaptive attacker**. Four follow-up items remain and are documented in §4.
@@ -801,32 +831,43 @@ Human evaluation is **required** for ACL/EMNLP and a **strong-plus** for USENIX 
 
 ```bash
 cd veri-rag
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Core + optional LLM / embeddings / FAISS (run each line separately; no inline comments)
+pip install -e .
+pip install -e ".[llm]"
+pip install -e ".[all]"
 
 cp .env.example .env
-# edit .env: OPENAI_API_KEY, OLLAMA_HOST, etc.
+# Optional for real LLM: OPENAI_API_KEY=sk-... in .env
+
+# If `veri-rag` is not found, activate .venv or use:
+# ./scripts/veri-rag.sh <command>
 
 veri-rag create-synthetic-corpus
 veri-rag ingest --config configs/mvp.yaml
+veri-rag train-calibrator --config configs/mvp.yaml
 
-# Baseline (MockLLM by default)
 veri-rag ask "What is the refund period?"
-
-# Full loop on a poisoned query
-veri-rag generate-attacks --attack poisoning
 veri-rag run-attack-eval --config configs/mvp.yaml
-veri-rag scan-risk         --query-id q001
-veri-rag analyze-influence --query-id q001 --mode riaa --pairwise
-veri-rag build-provenance  --query-id q001
-veri-rag repair            --query-id q001
-veri-rag verify            --query-id q001 --certified-smoothing
 
-# Full experiment matrix
-veri-rag run-experiment --config configs/experiments.yaml
+# Full laptop paper pipeline (mock LLM; ~2 min)
+./scripts/run_paper_pipeline.sh configs/mvp.yaml mock 5
+
+# PoisonedRAG subset
+veri-rag download-benchmark --name poisonedrag --dataset nq --max-queries 20
+veri-rag ingest --config configs/poisonedrag.yaml
+veri-rag run-experiment --config configs/poisonedrag.yaml
+
+# LLM experiments (defaults to mock; OpenAI falls back on quota errors)
+veri-rag run-paper-llm --profile mock --max-queries 4
+veri-rag run-paper-llm --profile openai --max-queries 4
 
 pytest -q
 ```
+
+Precomputed results are already in `veri-rag/outputs/` after clone; re-run the commands above to regenerate.
 
 ---
 
@@ -834,26 +875,27 @@ pytest -q
 
 ```
 veri-rag create-synthetic-corpus
-veri-rag ingest              --config configs/mvp.yaml
-veri-rag ask                 "<question>"
-veri-rag generate-attacks    --attack {poisoning|prompt_injection|secret_leakage|
-                                       blocker|topic_flip|adaptive}
-veri-rag run-attack-eval     --config configs/mvp.yaml
-veri-rag scan-risk           --query-id <id>
-veri-rag tune-risk-weights   --config configs/experiments.yaml
-veri-rag analyze-influence   --query-id <id> --mode riaa [--pairwise]
-veri-rag build-provenance    --query-id <id>
-veri-rag repair              --query-id <id>
-veri-rag verify              --query-id <id> [--certified-smoothing]
-veri-rag run-baseline        --method {no_defense|safe_prompt|perplexity_filter|
-                                       instruction_filter|dedup|self_consistency|
-                                       grada|robust_rag|risk_only_veri_rag|veri_rag_full}
-veri-rag download-benchmark  --name {nq|triviaqa|msmarco|poisonedrag|saferag}
-veri-rag run-experiment      --config configs/experiments.yaml
-veri-rag report              --results outputs/experiment_results/results.csv
-veri-rag export-human-eval   --queries 100 --methods full,robust_rag,grada,safe_prompt,no_defense
-veri-rag ingest-human-ratings --csv outputs/human_eval/ratings.csv
+veri-rag ingest                    --config configs/mvp.yaml
+veri-rag ask                       "<question>" [--config configs/mvp.yaml]
+veri-rag generate-attacks          --attack {poisoning|prompt_injection|secret_leakage|blocker|topic_flip|adaptive}
+veri-rag run-attack-eval           --config configs/mvp.yaml
+veri-rag train-calibrator          --config configs/mvp.yaml
+veri-rag scan-risk                 --query-id <id>
+veri-rag analyze-influence         --query-id <id>
+veri-rag build-provenance          --query-id <id>
+veri-rag repair                    --query-id <id>
+veri-rag verify                    --query-id <id>
+veri-rag download-benchmark        --name poisonedrag --dataset nq --max-queries 20
+veri-rag run-experiment            --config configs/mvp.yaml
+veri-rag run-experiment-shard      --config configs/hpc_template.yaml --run-id <id> --shard-id 0 --num-shards 10
+veri-rag merge-hpc-results         --run-dir outputs/hpc_runs/<run_id>
+veri-rag run-paper-pipeline        [--max-poisonedrag 15]
+veri-rag run-paper-llm             --profile {mock|openai|ollama_llama} [--max-queries 4] [--fallback-mock]
 ```
+
+**Configs:** `configs/mvp.yaml` (enterprise), `configs/poisonedrag.yaml`, `configs/paper_openai.yaml`, `configs/models.yaml`, `configs/hpc_template.yaml`, `configs/experiments.yaml`.
+
+**Wrapper (auto-activates `.venv`):** `./scripts/veri-rag.sh <command> ...`
 
 ---
 
@@ -915,15 +957,13 @@ W10   M14:    Paper figures + Limitations + camera-ready
 | Venue | Fit | Notes |
 |---|---|---|
 | **USENIX Security 2026** | ⭐⭐⭐⭐⭐ | best fit; requires threat model + adaptive attacker + certified component — all present |
-| **NDSS 2026** | ⭐⭐⭐⭐ | good fit for practical defenses |
+| **NDSS 2027** | ⭐⭐⭐⭐ | good fit for practical defenses |
 | **CCS 2026** | ⭐⭐⭐⭐ | needs strong formal section (Theorem 1 helps) |
 | **IEEE S&P 2027** | ⭐⭐⭐ | high bar on formal guarantees |
 | **ACL / EMNLP 2026** | ⭐⭐⭐⭐ | strong on benchmarks + human eval; reframe slightly to NLP robustness |
 | **NeurIPS / ICML 2026** | ⭐⭐⭐ | requires algorithmic novelty + theory (Lemma 1 + Theorem 1 help) |
 
 **Primary target:** USENIX Security 2026. **Backup:** EMNLP 2026.
-
-**Expected outcome with clean execution + Issues 1–4 closed:** ~60–70% acceptance probability at the primary venue.
 
 ---
 

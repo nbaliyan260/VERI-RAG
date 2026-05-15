@@ -1,0 +1,87 @@
+# VERI-RAG config for PoisonedRAG (NQ subset) experiments
+corpus:
+  data_dir: "data/benchmarks/poisonedrag/clean_corpus"
+  processed_dir: "data/processed/poisonedrag"
+
+chunking:
+  chunk_size: 400
+  chunk_overlap: 50
+  min_chunk_size: 50
+
+embedding:
+  provider: "tfidf"
+  model_name: "all-MiniLM-L6-v2"
+  batch_size: 32
+  dimension: 384
+
+vector_store:
+  provider: "memory"
+  index_path: "data/processed/poisonedrag/faiss_index"
+
+retrieval:
+  top_k: 5
+
+llm:
+  provider: "mock"
+  model_name: "mock-llm-v1"
+  temperature: 0.0
+  max_tokens: 512
+
+llm_profile: mock
+
+risk_scoring:
+  weights:
+    instruction: 0.25
+    sensitive: 0.25
+    retrieval_anomaly: 0.15
+    conflict: 0.15
+    coordination: 0.10
+    stance_shift: 0.10
+  thresholds:
+    suspicious: 0.60
+    high_risk: 0.80
+
+influence:
+  method: "riaa"
+  enable_pairwise: true
+  max_pairwise_tests: 4
+  pairwise_threshold: 0.15
+  calibrator_path: "data/processed/poisonedrag/harmfulness_calibrator.pkl"
+  risk_filter_threshold: 0.40
+
+repair:
+  max_replacement_chunks: 3
+  source_diversity_min: 2
+
+verification:
+  certified_smoothing:
+    enabled: true
+    num_samples: 4
+    subset_fraction: 0.75
+    confidence_alpha: 0.05
+    stability_threshold: 0.55
+  pass_threshold: 0.60
+
+experiment:
+  benchmark: poisonedrag
+  max_queries: 5
+  attacks:
+    - poisoning
+    - prompt_injection
+    - adaptive
+  defenses:
+    - none
+    - safe_prompt
+    - grada
+    - robust_rag
+    - veri_rag
+
+outputs:
+  base_dir: "outputs"
+  answers_dir: "outputs/poisonedrag/answers"
+  certificates_dir: "outputs/poisonedrag/certificates"
+  provenance_dir: "outputs/poisonedrag/provenance_graphs"
+  results_dir: "outputs/poisonedrag/experiment_results"
+  reports_dir: "outputs/poisonedrag/reports"
+  hpc_runs_dir: "outputs/hpc_runs/poisonedrag"
+  cache_dir: "cache/poisonedrag"

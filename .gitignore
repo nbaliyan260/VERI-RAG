@@ -10,9 +10,10 @@ build/
 venv/
 env/
 
-# VERI-RAG runtime outputs (regenerate locally / on HPC)
-veri-rag/outputs/
+# VERI-RAG runtime (regenerate locally; CSV/JSONL/MD reports under outputs/ are committed)
 veri-rag/cache/
+veri-rag/outputs/**/cache/
+veri-rag/outputs/**/cached_llm_calls/
 veri-rag/data/processed/
 veri-rag/.pytest_cache/
 veri-rag/logs/
@@ -35,3 +36,5 @@ veri-rag/data/processed/faiss_index/
 
 # Optional: keep synthetic data small; ignore huge benchmark dumps
 veri-rag/data/benchmarks/**/raw/
+veri-rag/data/benchmarks/poisonedrag/upstream_repo/
+veri-rag/data/processed/

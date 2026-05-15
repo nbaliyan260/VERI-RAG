@@ -1,0 +1,7 @@
+{
+  "source": "https://github.com/sleeepeer/PoisonedRAG",
+  "dataset": "nq",
+  "num_queries": 5,
+  "num_adv_texts": 25,
+  "raw_file": "/Users/nazishbaliyan/Desktop/Cyber Security Research Papers/VERI- RAG/veri-rag/data/benchmarks/poisonedrag/raw/nq.json"
+}

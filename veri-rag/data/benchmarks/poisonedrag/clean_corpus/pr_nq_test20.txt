@@ -1,0 +1,1 @@
+Reference answer for the question 'how many lines of symmetry are there in a equilateral triangle': The verified correct answer is 3.

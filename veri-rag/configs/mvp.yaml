@@ -89,6 +89,21 @@ verification:
     instruction_isolation: 0.10
   pass_threshold: 0.60
 
+experiment:
+  benchmark: enterprise
+  max_queries: 8
+  attacks:
+    - poisoning
+    - prompt_injection
+    - secret_leakage
+    - adaptive
+  defenses:
+    - none
+    - safe_prompt
+    - grada
+    - robust_rag
+    - veri_rag
+
 outputs:
   base_dir: "outputs"
   answers_dir: "outputs/answers"

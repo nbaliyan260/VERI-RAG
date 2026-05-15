@@ -12,29 +12,53 @@ Working subtitle (paper title): **Interaction-Aware Attribution and Evidence-Car
 
 ### Implementation snapshot (May 2026)
 
+**Runnable Python package:** `veri-rag/` · **Author:** Nazish Baliyan · **Tests:** `pytest -q` → **20 passed**
+
 | Component | Status |
 |---|---|
 | Phase 1 MVP (RAG, 6 attacks, risk, LOO/RIAA, repair, certificate) | ✅ Shipped |
-| RIAA pairwise + harmfulness calibrator | ✅ |
-| Certified post-repair smoothing (Clopper–Pearson) | ✅ |
-| Baselines: GRADA, RobustRAG | ✅ |
-| PoisonedRAG download + NQ subset experiments | ✅ |
-| HPC shard / merge (`run-experiment-shard`, Slurm template) | ✅ |
-| LLM profiles (mock / **Claude** / OpenAI / Ollama) + auto fallback | ✅ |
-| End-to-end script | `veri-rag/scripts/run_paper_pipeline.sh` |
-| Tests | **19** pytest (run `cd veri-rag && pytest -q`) |
+| RIAA pairwise + logistic harmfulness calibrator | ✅ |
+| Certified post-repair smoothing (Clopper–Pearson, ε_raw / ε_post) | ✅ |
+| Baselines: GRADA, RobustRAG (+ safe_prompt, risk_quarantine in matrix) | ✅ |
+| Adaptive attacker (defense-aware evasion) | ✅ |
+| PoisonedRAG official NQ subset (GitHub download + ingest) | ✅ |
+| HPC experiment sharding + merge + Slurm template | ✅ |
+| LLM backends: **Mock**, **Anthropic Claude**, OpenAI, Ollama + `--profile auto` | ✅ |
+| GitHub repo with code + committed CSV/JSON results | ✅ |
 
-**Latest laptop runs (MockLLM, reproducible without API billing):**
+### What has been completed (project log)
+
+| Phase | Deliverable |
+|---|---|
+| **Research plan** | `VERI_RAG_IDEA_REVIEW.md` — A* gap analysis, RIAA/Shapley wording, venue timeline |
+| **Phase 1 — MVP** | Synthetic enterprise corpus, TF-IDF + in-memory index, Typer CLI, 6 attacks, risk scorer, influence (LOO), repair engine, provenance graph, verification certificate |
+| **Phase 2 — Paper scale** | RIAA + pairwise Shapley interactions, calibrator training, certified smoothing in verifier, GRADA/RobustRAG baselines, PoisonedRAG loader (`download-benchmark`), experiment runner with `max_queries`, HPC shard/merge |
+| **Phase 3 — LLM integration** | `AnthropicLLM` + `OpenAICompatibleLLM` + `OllamaLLM`; `configs/models.yaml` profiles; `llm_health.py` probes; OpenAI quota → Claude → mock fallback |
+| **Evaluation runs** | Full laptop pipeline (`run_paper_pipeline.sh`); enterprise + PoisonedRAG defense matrices; HPC 2-shard demo; real **Claude Haiku 4.5** experiment (138 rows) |
+| **Quality** | 20 unit/integration tests; `.env` for secrets (never committed); `scripts/veri-rag.sh` wrapper for venv |
+
+### Committed experiment results (on GitHub)
 
 | Experiment | Rows | Path |
 |---|---:|---|
-| Enterprise defense matrix | 496 | `veri-rag/outputs/experiment_results/results.csv` |
-| PoisonedRAG (NQ subset) | 110 | `veri-rag/outputs/poisonedrag/experiment_results/results.csv` |
-| Paper LLM (Claude Haiku, 2-query run) | 138 | `veri-rag/outputs/paper_claude/results/results.csv` |
-| Paper LLM (mock fallback) | 88 | `veri-rag/outputs/paper_openai/results/results.csv` |
+| Enterprise defense matrix (8 queries × attacks × defenses) | 496 | `veri-rag/outputs/experiment_results/results.csv` |
+| PoisonedRAG NQ subset | 110 | `veri-rag/outputs/poisonedrag/experiment_results/results.csv` |
+| **Real LLM — Claude Haiku 4.5** (2-query matrix) | 138 | `veri-rag/outputs/paper_claude/results/results.csv` |
+| Mock LLM paper run | 88 | `veri-rag/outputs/paper_openai/results/results.csv` |
 | HPC shard demo (merged) | 216 | `veri-rag/outputs/hpc_runs/paper_demo/merged_results.csv` |
 
-Markdown summaries: `veri-rag/outputs/reports/report.md`, `veri-rag/outputs/poisonedrag/reports/report.md`, `veri-rag/outputs/hpc_runs/paper_demo/final_report.md`.
+Also committed: verification certificates, provenance graphs (JSON/GraphML), Markdown reports under `veri-rag/outputs/reports/`, `poisonedrag/reports/`, `paper_claude/reports/`, `hpc_runs/paper_demo/final_report.md`.
+
+**Not on GitHub (regenerate locally):** `.env`, `.venv/`, `data/processed/` indexes, `outputs/**/cache/`, PoisonedRAG `raw/*.json`.
+
+### LLM setup (student workflow)
+
+1. Copy `veri-rag/.env.example` → `veri-rag/.env`
+2. Set `ANTHROPIC_API_KEY=sk-ant-...` (Claude — works without OpenAI billing)
+3. Optionally add `OPENAI_API_KEY` later
+4. Run: `veri-rag run-paper-llm --profile auto --max-queries 4`
+
+Models used: `claude-haiku-4-5-20251001` (default), `claude-sonnet-4-20250514` (profile `claude_sonnet`).
 
 ---
 
@@ -268,61 +292,54 @@ The paper claims **five contributions**:
 ## 8. Repository Structure
 
 ```text
-veri-rag/
-├── README.md                          # this file
-├── VERI_RAG_IDEA_REVIEW.md            # diagnostic A* gap analysis
-├── pyproject.toml
-├── requirements.txt
-├── .env.example
-├── configs/
-│   ├── mvp.yaml
-│   ├── experiments.yaml
-│   ├── models.yaml
-│   └── weights.yaml
-├── data/
-│   ├── synthetic_enterprise/
-│   ├── benchmarks/
-│   │   ├── nq/  triviaqa/  msmarco/  poisonedrag/  saferag/
-│   └── attacks/
-├── outputs/
-│   ├── answers/  certificates/  provenance_graphs/
-│   ├── experiment_results/  cached_llm_calls/  reports/
-├── src/
-│   └── veri_rag/
-│       ├── __init__.py
-│       ├── cli.py
-│       ├── config/        { settings.py, schema.py }
-│       ├── corpus/        { document, loader, chunker, embedder, vector_store }
-│       ├── rag/           { retriever, generator, prompts, baseline_rag }
-│       ├── llm/           { base, mock, openai_compat, ollama, cache }
-│       ├── attacks/       { base, poisoning, prompt_injection, secret_leakage,
-│       │                    blocker, topic_flip, adaptive, attack_runner }
-│       ├── detection/     { risk_features, instruction_detector,
-│       │                    sensitive_span_detector, conflict_detector,
-│       │                    stance_detector, risk_scorer }
-│       ├── influence/     { answer_similarity, leave_one_out,
-│       │                    pairwise_interaction, riaa, influence_scorer }
-│       ├── provenance/    { graph_builder, claim_extractor,
-│       │                    evidence_aligner, graph_exporter }
-│       ├── repair/        { policy, quarantine, reranker, source_diversifier,
-│       │                    context_sanitizer, repair_engine }
-│       ├── verify/        { certificate, stability_tests, leakage_tests,
-│       │                    grounding_tests, smoothing_certified, verifier }
-│       ├── baselines/     { no_defense, safe_prompt, perplexity_filter,
-│       │                    instruction_filter, dedup, self_consistency,
-│       │                    grada, robust_rag }
-│       ├── eval/          { metrics, judges, experiment_runner,
-│       │                    report_writer, cost_tracker, human_eval }
-│       └── api/           { main, schemas }
-└── tests/
-    ├── test_chunker.py
-    ├── test_attacks.py
-    ├── test_risk_scorer.py
-    ├── test_influence.py
-    ├── test_pairwise.py
-    ├── test_repair.py
-    ├── test_certificate.py
-    └── test_experiment_runner.py
+VERI-RAG/                              # repo root (this README)
+├── README.md
+├── VERI_RAG_IDEA_REVIEW.md
+└── veri-rag/                          # Python package (cd here to run)
+    ├── README.md
+    ├── pyproject.toml
+    ├── requirements.txt
+    ├── .env.example                   # copy → .env (keys, not committed)
+    ├── configs/
+    │   ├── mvp.yaml                   # enterprise laptop default
+    │   ├── poisonedrag.yaml
+    │   ├── paper_claude.yaml          # Claude experiments
+    │   ├── paper_openai.yaml
+    │   ├── models.yaml                # LLM profiles (auto, claude_*, openai, ollama)
+    │   ├── experiments.yaml
+    │   └── hpc_template.yaml
+    ├── scripts/
+    │   ├── run_paper_pipeline.sh      # end-to-end laptop pipeline
+    │   └── veri-rag.sh                # auto-activates .venv
+    ├── hpc/
+    │   ├── merge_results.py
+    │   └── slurm_array_experiment.sh
+    ├── data/
+    │   ├── synthetic_enterprise/
+    │   ├── attacked_corpus/           # generated attack chunks
+    │   └── benchmarks/poisonedrag/    # queries.jsonl, attacks_nq.jsonl, clean_corpus/
+    ├── outputs/                       # committed CSV/JSON reports (not cache/)
+    │   ├── experiment_results/
+    │   ├── poisonedrag/
+    │   ├── paper_claude/
+    │   ├── paper_openai/
+    │   ├── certificates/
+    │   ├── provenance_graphs/
+    │   └── hpc_runs/paper_demo/
+    ├── src/veri_rag/
+    │   ├── cli.py
+    │   ├── pipeline.py
+    │   ├── attacks/                   # 6 attack types + runner
+    │   ├── baselines/                 # grada.py, robust_rag.py, runner.py
+    │   ├── corpus/                    # ingest, benchmarks/poisonedrag*.py
+    │   ├── detection/risk_scorer.py
+    │   ├── influence/                 # riaa, pairwise, calibrator, leave_one_out
+    │   ├── rag/                       # generator (mock/openai/anthropic/ollama)
+    │   ├── repair/repair_engine.py
+    │   ├── provenance/graph_builder.py
+    │   ├── verify/                    # verifier.py, smoothing.py
+    │   └── eval/                      # experiment_runner, shard, metrics
+    └── tests/                         # 20 pytest files
 ```
 
 ---
@@ -335,7 +352,7 @@ veri-rag/
 | RAG | custom modules (LangChain optional for loaders) |
 | Vector store | FAISS in-memory MVP → Qdrant for full experiments |
 | Embeddings | `sentence-transformers` (`bge-small-en-v1.5` default); TF-IDF fallback |
-| LLM | `BaseLLM` abstraction → `MockLLM`, `OpenAICompatibleLLM`, `OllamaLLM` |
+| LLM | `BaseLLM` → `MockLLM`, `AnthropicLLM` (Claude), `OpenAICompatibleLLM`, `OllamaLLM` |
 | API | FastAPI (optional) |
 | CLI | Typer |
 | Config | YAML + Pydantic v2 |
@@ -800,7 +817,7 @@ Human evaluation is **required** for ACL/EMNLP and a **strong-plus** for USENIX 
 | M6 | Self-healing repair engine | `veri-rag repair --query-id q001` |
 | M7 | Verification certificate (heuristic) | `veri-rag verify --query-id q001` |
 | M8 | **Certified post-repair smoothing** | `veri-rag verify --certified-smoothing` |
-| M9 | Real LLMs (`OpenAILLM`, `OllamaLLM`) | swap via `configs/models.yaml` |
+| M9 | Real LLMs (Claude, OpenAI, Ollama) | `configs/models.yaml` + `run-paper-llm --profile auto` |
 | M10 | Real benchmarks (NQ, TriviaQA, PoisonedRAG, SafeRAG) | `veri-rag download-benchmark` |
 | M11 | Strong baselines (GRADA, RobustRAG, perplexity, …) | `veri-rag run-baseline --method <name>` |
 | M12 | Experiment runner + Markdown report | `veri-rag run-experiment` |
@@ -854,8 +871,8 @@ veri-rag train-calibrator --config configs/mvp.yaml
 veri-rag ask "What is the refund period?"
 veri-rag run-attack-eval --config configs/mvp.yaml
 
-# Full laptop paper pipeline (mock LLM; ~2 min)
-./scripts/run_paper_pipeline.sh configs/mvp.yaml mock 5
+# Full laptop paper pipeline (~15 min; uses --profile auto → Claude if key in .env)
+./scripts/run_paper_pipeline.sh configs/mvp.yaml auto 5
 
 # PoisonedRAG subset
 veri-rag download-benchmark --name poisonedrag --dataset nq --max-queries 20
@@ -892,13 +909,15 @@ veri-rag download-benchmark        --name poisonedrag --dataset nq --max-queries
 veri-rag run-experiment            --config configs/mvp.yaml
 veri-rag run-experiment-shard      --config configs/hpc_template.yaml --run-id <id> --shard-id 0 --num-shards 10
 veri-rag merge-hpc-results         --run-dir outputs/hpc_runs/<run_id>
+veri-rag run-baseline              --method {grada|robust_rag|...}
 veri-rag run-paper-pipeline        [--max-poisonedrag 15]
-veri-rag run-paper-llm             --profile {auto|claude_haiku|openai|mock|ollama_llama} [--config configs/paper_claude.yaml]
+veri-rag run-paper-llm             --profile {auto|claude_haiku|claude_sonnet|openai|mock|ollama_llama}
+                                   [--config configs/paper_claude.yaml] [--max-queries 4]
 ```
 
-**Configs:** `configs/mvp.yaml` (enterprise), `configs/poisonedrag.yaml`, `configs/paper_openai.yaml`, `configs/models.yaml`, `configs/hpc_template.yaml`, `configs/experiments.yaml`.
+**Configs:** `mvp.yaml`, `poisonedrag.yaml`, `paper_claude.yaml`, `paper_openai.yaml`, `models.yaml`, `hpc_template.yaml`, `experiments.yaml`.
 
-**Wrapper (auto-activates `.venv`):** `./scripts/veri-rag.sh <command> ...`
+**Scripts:** `./scripts/run_paper_pipeline.sh` · `./scripts/veri-rag.sh <command>` (activates `.venv` automatically).
 
 ---
 

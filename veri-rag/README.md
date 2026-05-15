@@ -1,18 +1,25 @@
 # VERI-RAG (Python package)
 
-Runnable prototype for **Evidence-Carrying Self-Healing Defense for Secure RAG**.
+Evidence-carrying self-healing defense for secure RAG — **runnable research prototype**.
 
-Full specification, architecture, and results tables: **[../README.md](../README.md)**.
+**Full documentation, architecture, experiment tables, and project log:** [../README.md](../README.md)
 
-## Quick commands
+## Install & run
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[llm]"
-# Set ANTHROPIC_API_KEY in .env, then:
-veri-rag run-paper-llm --profile auto --max-queries 4
+cp .env.example .env    # ANTHROPIC_API_KEY for Claude; OPENAI_API_KEY optional
+
+./scripts/veri-rag.sh run-paper-llm --profile auto --max-queries 4
 ./scripts/run_paper_pipeline.sh
-pytest -q
+pytest -q               # 20 tests
 ```
 
-Results: `outputs/experiment_results/`, `outputs/poisonedrag/`, `outputs/paper_openai/`, `outputs/hpc_runs/paper_demo/`.
+## Results (committed on GitHub)
+
+| Run | Path |
+|-----|------|
+| Enterprise | `outputs/experiment_results/results.csv` |
+| PoisonedRAG | `outputs/poisonedrag/experiment_results/results.csv` |
+| Claude LLM | `outputs/paper_claude/results/results.csv` |

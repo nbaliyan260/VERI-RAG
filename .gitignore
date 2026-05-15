@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# VERI-RAG runtime outputs (regenerate locally / on HPC)
+veri-rag/outputs/
+veri-rag/cache/
+veri-rag/data/processed/
+veri-rag/.pytest_cache/
+veri-rag/logs/
+
+# Secrets — never commit
+.env
+*.pem
+credentials.json
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+*.swp
+
+# Large embeddings / indexes (rebuild with veri-rag ingest)
+veri-rag/data/processed/faiss_index/
+*.npy
+*.faiss
+
+# Optional: keep synthetic data small; ignore huge benchmark dumps
+veri-rag/data/benchmarks/**/raw/

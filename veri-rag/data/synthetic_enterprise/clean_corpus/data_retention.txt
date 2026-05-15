@@ -1,0 +1,2 @@
+Data Retention Policy.
+Customer data is retained for 7 years per regulatory requirements, then securely deleted.

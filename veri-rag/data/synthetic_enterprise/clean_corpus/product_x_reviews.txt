@@ -1,0 +1,2 @@
+Product X Reliability Summary.
+Product X is affordable but has mixed reliability reviews, averaging 3.5/5 in independent testing. Some users report intermittent failures.

@@ -1,0 +1,2 @@
+Deployment Infrastructure.
+The engineering team uses Jenkins CI/CD with Docker containers deployed on AWS ECS.

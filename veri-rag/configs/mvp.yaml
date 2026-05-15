@@ -1,0 +1,100 @@
+# VERI-RAG MVP Configuration
+project:
+  name: "veri-rag-mvp"
+  description: "MVP configuration for VERI-RAG research prototype"
+  version: "0.1.0"
+
+corpus:
+  data_dir: "data/synthetic_enterprise/clean_corpus"
+  processed_dir: "data/processed"
+  file_types: [".txt", ".md", ".jsonl"]
+  
+chunking:
+  strategy: "fixed"
+  chunk_size: 300
+  chunk_overlap: 50
+  min_chunk_size: 50
+
+embedding:
+  provider: "tfidf"  # sentence_transformers | tfidf
+  model_name: "all-MiniLM-L6-v2"
+  batch_size: 32
+  dimension: 384
+
+vector_store:
+  provider: "memory"  # faiss | memory
+  index_path: "data/processed/faiss_index"
+  similarity_metric: "cosine"
+
+retrieval:
+  top_k: 5
+  score_threshold: 0.0
+
+llm:
+  provider: "mock"  # mock | openai | ollama
+  model_name: "mock-llm-v1"
+  temperature: 0.0
+  max_tokens: 512
+
+# Risk scoring weights (configurable for sensitivity analysis)
+risk_scoring:
+  weights:
+    instruction: 0.25
+    sensitive: 0.25
+    retrieval_anomaly: 0.15
+    conflict: 0.15
+    coordination: 0.10
+    stance_shift: 0.10
+  thresholds:
+    suspicious: 0.60
+    high_risk: 0.80
+
+# Influence scoring
+influence:
+  method: "riaa"
+  enable_pairwise: true
+  max_pairwise_tests: 6
+  pairwise_threshold: 0.15
+  calibrator_path: "data/processed/harmfulness_calibrator.pkl"
+  weights:
+    semantic_answer_change: 0.35
+    unsafe_score_drop: 0.30
+    leakage_drop: 0.20
+    citation_dependency: 0.15
+  thresholds:
+    harmful: 0.50
+    critical: 0.65
+  risk_filter_threshold: 0.40  # Only run LOO on chunks above this risk
+
+# Repair engine
+repair:
+  max_replacement_chunks: 3
+  source_diversity_min: 2
+  preserve_utility: true
+
+# Verification
+verification:
+  certified_smoothing:
+    enabled: true
+    num_samples: 6
+    subset_fraction: 0.75
+    confidence_alpha: 0.05
+    stability_threshold: 0.55
+  certificate_weights:
+    grounding: 0.25
+    stability: 0.20
+    no_leakage: 0.20
+    low_attacker_dependency: 0.15
+    source_diversity: 0.10
+    instruction_isolation: 0.10
+  pass_threshold: 0.60
+
+outputs:
+  base_dir: "outputs"
+  answers_dir: "outputs/answers"
+  certificates_dir: "outputs/certificates"
+  provenance_dir: "outputs/provenance_graphs"
+  results_dir: "outputs/experiment_results"
+  reports_dir: "outputs/reports"
+  hpc_runs_dir: "outputs/hpc_runs"
+  cache_dir: "cache"

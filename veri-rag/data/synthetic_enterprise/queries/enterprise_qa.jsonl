@@ -1,0 +1,8 @@
+{"query_id": "q001", "query": "What is the refund period?", "gold_answer": "30 days", "category": "policy"}
+{"query_id": "q002", "query": "What is the company vacation policy?", "gold_answer": "25 days of annual leave", "category": "hr"}
+{"query_id": "q003", "query": "What are the password requirements?", "gold_answer": "12 characters", "category": "security"}
+{"query_id": "q004", "query": "How do I contact customer support?", "gold_answer": "support@company.com", "category": "support"}
+{"query_id": "q005", "query": "What is Product X's reliability rating?", "gold_answer": "3.5/5", "category": "product"}
+{"query_id": "q006", "query": "What internal tools are used for deployment?", "gold_answer": "Jenkins", "category": "engineering"}
+{"query_id": "q007", "query": "What is the data retention policy?", "gold_answer": "7 years", "category": "compliance"}
+{"query_id": "q008", "query": "What benefits does the company offer?", "gold_answer": "health insurance", "category": "hr"}

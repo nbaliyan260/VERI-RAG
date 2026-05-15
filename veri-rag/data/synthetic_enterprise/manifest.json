@@ -1,0 +1,14 @@
+{
+  "num_documents": 8,
+  "num_queries": 8,
+  "documents": [
+    "refund_policy",
+    "vacation_policy",
+    "password_policy",
+    "support_contact",
+    "product_x_reviews",
+    "deployment_tools",
+    "data_retention",
+    "benefits"
+  ]
+}
